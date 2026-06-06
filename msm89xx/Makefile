@@ -6,9 +6,6 @@ BOARD:=msm89xx
 BOARDNAME:=Boards based on Snapdragon 210/410/615 chipsets
 FEATURES:=ext4 usb usbgadget gpio fpu rootfs-part boot-part squashfs
 SUBTARGETS:=msm8916
-
-# Kernel version map: OpenWrt major -> kernel patchver
-#KERNEL_FOR_24 := 6.6
 KERNEL_FOR_25 := 6.12
 KERNEL_DEFAULT := 6.12
 

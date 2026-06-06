@@ -39,15 +39,4 @@ define Device/yiming-uz801v3
 endef
 TARGET_DEVICES += yiming-uz801v3
 
-define Device/generic-uf02
-  $(Device/msm8916)
-  DEVICE_VENDOR := Generic
-  DEVICE_MODEL := UF02 (250605 V0S)
-  FILESYSTEMS := squashfs
-  DEVICE_PACKAGES := wpad-basic-wolfssl rmtfs uci-usb-gadget \
-                     block-mount f2fs-tools \
-                     msm-firmware-dumper
-endef
-TARGET_DEVICES += generic-uf02
-
 endif

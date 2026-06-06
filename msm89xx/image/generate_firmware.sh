@@ -71,15 +71,38 @@ echo "[+] Found aarch64 assembler: $(command -v ${AARCH64_AS})"
 echo "[+] Found arm toolchain: $(command -v ${ARM_CROSS}gcc)"
 
 # Clone sources (idempotent; reuse if already present to speed up rebuilds).
-for repo in qhypstub:qhypstub lk2nd:lk2nd qtestsign:qtestsign; do
-  name="${repo%:*}"
-  dir="${repo#*:}"
+REPOS=(
+  "qhypstub|https://github.com/msm8916-mainline/qhypstub.git|fca3c513b6fb5e5b8fabae21dac1f4a5c0b51bc6"
+  "lk2nd|https://github.com/msm8916-mainline/lk2nd.git|87ccbc5a5502d4dd8183bf3a4279d90704330fb9"
+  "qtestsign|https://github.com/msm8916-mainline/qtestsign.git|f3df53a5f0e37ccee076541f30f9d5b8340fc2d3"
+)
+
+echo "[+] Cloning repositories..."
+for repo_info in "${REPOS[@]}"; do
+  dir="${repo_info%%|*}"
+  rest="${repo_info#*|}"
+  url="${rest%%|*}"
+  commit="${rest#*|}"
+
+  echo "[+] Processing $dir..."
+
   if [ ! -d "$BUILDDIR/$dir/.git" ]; then
-    echo "[+] Cloning $name..."
-    git clone "https://github.com/msm8916-mainline/$name.git" "$BUILDDIR/$dir"
-  else
-    echo "[+] Reusing existing $name..."
+    echo "    - Cloning repository..."
+    git clone -q "$url" "$BUILDDIR/$dir"
   fi
+
+  (
+    cd "$BUILDDIR/$dir"
+    git rev-parse -q --verify "$commit^{commit}" >/dev/null || git fetch -q origin
+    git checkout -q "$commit"
+    git reset -q --hard "$commit"
+    CURRENT_HASH=$(git rev-parse HEAD)
+    if [ "$CURRENT_HASH" != "$commit" ]; then
+      echo "[-] ERROR: Hash mismatch for $dir! Expected $commit, got $CURRENT_HASH"
+      exit 1
+    fi
+    echo "    - Successfully pinned to hash: $CURRENT_HASH"
+  )
 done
 
 # Build qhypstub (pure AArch64 assembly).
@@ -107,7 +130,9 @@ if [ ! -f "$BUILDDIR/lk2nd/build-lk1st-msm8916/emmc_appsboot.mbn" ]; then
     grep -qxF 'DEFINES += USE_TARGET_HS200_CAPS=1' project/lk1st-msm8916.mk || \
       echo 'DEFINES += USE_TARGET_HS200_CAPS=1' >> project/lk1st-msm8916.mk
     make clean || true
+    rm -rf lib/openssl/
     make \
+      CRYPTO_SW_BACKEND=none \
       LK2ND_BUNDLE_DTB="msm8916-512mb-mtp.dtb" \
       LK2ND_COMPATIBLE="yiming,uz801-v3" \
       TOOLCHAIN_PREFIX="$ARM_CROSS" \
@@ -124,10 +149,24 @@ mkdir -p "$OUTDIR"
 # Download base Qualcomm bootloader bundle if missing (rpm/sbl1/tz).
 echo "[+] Downloading Qualcomm firmware..."
 FWZIP="$BUILDDIR/dragonboard-410c-bootloader-emmc-linux-176.zip"
+EXPECTED_SHA256="a37c4e82a970ae2350fcfc7180559caf1dc3928e7c169316fe4ab899b7d305ad"
+
 if [ ! -f "$FWZIP" ]; then
   wget -q --show-progress -O "$FWZIP" \
-    "https://github.com/Mio-sha512/openstick-stuff/raw/refs/heads/main/builder-stuff/dragonboard-410c-bootloader-emmc-linux-176.zip"
+    "http://releases.linaro.org/96boards/dragonboard410c/linaro/rescue/21.12/dragonboard-410c-bootloader-emmc-linux-176.zip"
 fi
+
+echo "[+] Verifying firmware integrity..."
+ACTUAL_SHA256=$(sha256sum "$FWZIP" | awk '{print $1}')
+
+if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+  echo "[-] ERROR: Firmware hash mismatch!"
+  echo "    Expected: $EXPECTED_SHA256"
+  echo "    Got:      $ACTUAL_SHA256"
+  rm -f "$FWZIP"
+  exit 1
+fi
+echo "[+] Firmware hash verified successfully!"
 
 # Extract required files only.
 unzip -o -j -d "$OUTDIR" "$FWZIP" \
