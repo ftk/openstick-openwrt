@@ -1,4 +1,4 @@
-name: Build packages only for UZ801 OpenWrt
+name: Build packages only for OpenWrt
 
 on:
   workflow_dispatch:
@@ -9,6 +9,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [ uz801, jz01-45 ]
 
     env:
       TZ: Europe/Moscow
@@ -81,14 +86,14 @@ jobs:
       - name: Apply configuration
         working-directory: openwrt
         run: |
-          cp ../diffconfig_uz801 .config
+          cp ../diffconfig_${{ matrix.device }} .config
           make defconfig
 
       - name: Cache downloaded sources
         uses: actions/cache@v4
         with:
           path: openwrt/dl
-          key: openwrt-dl-${{ steps.openwrt_version.outputs.VERSION }}-${{ hashFiles('diffconfig_uz801') }}
+          key: openwrt-dl-${{ steps.openwrt_version.outputs.VERSION }}-${{ hashFiles('diffconfig_${{ matrix.device }}') }}
           restore-keys: |
             openwrt-dl-${{ steps.openwrt_version.outputs.VERSION }}-
             openwrt-dl-
@@ -131,7 +136,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "packages-${{ steps.buildnum.outputs.BUILD_NUM }}"
-          name: "Custom Packages for UZ801 Build ${{ steps.buildnum.outputs.BUILD_NUM }}"
+          name: "Custom Packages for ${{ matrix.device }} Build ${{ steps.buildnum.outputs.BUILD_NUM }}"
           files: release_files/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
